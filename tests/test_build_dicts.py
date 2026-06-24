@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for build_dicts.py — run with:  python3 -m unittest discover -s tests
+"""Tests for build_dicts.py. Run with:  python3 -m unittest discover -s tests
 
 Zero dependencies (stdlib unittest). Several tests are regressions for bugs hit
 while developing the builder; they are labelled REGRESSION.
@@ -11,10 +11,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "src"))
 import build_dicts as bd  # noqa: E402
 
-REPO_ROOT = Path(bd.__file__).resolve().parent
 COMPANION = REPO_ROOT / "Blood_Meridian_Vocabulary_Companion.epub"
 
 
@@ -78,7 +78,7 @@ class TestLookupKeys(unittest.TestCase):
         self.assertIn("selfmurder", forms)
 
     def test_empty_returns_none(self):
-        self.assertEqual(bd.lookup_keys("123 —"), (None, set()))
+        self.assertEqual(bd.lookup_keys("123 -"), (None, set()))
 
 
 class TestStyleText(unittest.TestCase):
