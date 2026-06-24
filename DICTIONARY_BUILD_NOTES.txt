@@ -1,1 +1,0 @@
-/private/tmp/claude-501/-Users-benjaminfeder-Programming-blood-meridian-guide/0d3b33f1-bcae-4e34-9cb7-4534d8bada54/scratchpad/webster -> reagan.json source: https://raw.githubusercontent.com/matthewreagan/WebstersEnglishDictionary/master/dictionary.json
