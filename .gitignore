@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Copyrighted source material — never publish the full novel or DRM'd books
+Blood_Meridian_-_Cormac_McCarthy.epub
+dokumen.pub_*.epub
+*.azw
+*.azw3
