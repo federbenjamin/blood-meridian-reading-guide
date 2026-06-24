@@ -1,42 +1,55 @@
-# Blood Meridian Kindle Dictionaries
+# Blood Meridian Reading Guide
 
 ## What is this
 
-A set of custom Kindle dictionaries to use while reading Cormac McCarthy's *Blood Meridian*. Look up a hard word in the book and the definition pops up in place, like any built-in Kindle dictionary.
+A chapter-by-chapter vocabulary companion to Cormac McCarthy's *Blood Meridian*. The novel is dense with archaic, dialectal, foreign, and technical words; this guide defines them in reading order, each with the sentence from the book it appears in, so you can follow what's actually being said.
 
-There are three `.mobi` files. **For reading the novel, use the first one.**
+**The reading guide itself is an EPUB — that's the main thing:**
 
 | File | What it is |
 |---|---|
-| `Blood_Meridian_Dictionary_Extended_BloodMeridian_First.mobi` | **Recommended.** A full English dictionary (Webster's 1913, ~102,000 words) with this book's special vocabulary folded in. For the ~1,300 Blood Meridian terms, the popup shows the in-context gloss and the book quote first, then a general definition below. Every other word gets the standard Webster's definition. |
+| `Blood_Meridian_Vocabulary_Companion.epub` | The reading guide. ~1,500 terms, chapter by chapter, each with a definition and the book quote it comes from. Opens in any e-reader (Kindle, Apple Books, Kobo, etc.). Read it alongside the novel. |
+
+**Bonus for Kindle owners — pop-up lookup dictionaries.** If you read the novel on a Kindle, you can also sideload one of these so that tapping a word brings the definition up in place, without leaving the page. The three `.mobi` files are in [`dictionaries/`](dictionaries):
+
+| File | What it is |
+|---|---|
+| `Blood_Meridian_Dictionary_Extended.mobi` | **Recommended.** A full English dictionary (Webster's 1913, ~102,000 words) with this book's ~1,300 special terms folded in. For those terms the popup shows the in-context gloss and book quote first, then a general definition below. |
 | `Webster_1913_Dictionary.mobi` | The general dictionary alone (Webster's 1913), no Blood Meridian additions. A good all-purpose lookup dictionary for any book. |
 | `Blood_Meridian_Dictionary.mobi` | Only the ~1,300 Blood Meridian terms, nothing else. Small and focused. |
 
-And one reading guide (a normal ebook, **not** a lookup dictionary):
+## How to use it
 
-| File | What it is |
-|---|---|
-| `Blood_Meridian_Vocabulary_Companion.epub` | The original vocabulary guide — the same ~1,500 terms laid out chapter by chapter, with definitions and the book quote for each, meant to be read straight through alongside the novel rather than tapped for pop-up lookups. |
+### The reading guide (EPUB) — start here
 
-## How to install it
+It's an ordinary ebook; read it next to the novel.
 
-Sideloading over USB is the reliable way (Send-to-Kindle often won't register a file as a dictionary).
+- **Kindle:** copy `Blood_Meridian_Vocabulary_Companion.epub` into the Kindle's `documents` folder over USB, or email it with [Send to Kindle](https://www.amazon.com/sendtokindle). It shows up in your library as a book to open.
+- **Apple Books / Kobo / Google Play Books / any reader app:** just open the `.epub`.
 
-1. Connect your Kindle to your computer with a USB cable. It shows up as a drive.
-2. Open the Kindle drive and find the **`documents`** folder.
-3. Copy the `.mobi` file you want (recommended: the "Extended" one) into that `documents` folder.
-4. Eject the Kindle and unplug it.
+### Bonus: the pop-up dictionaries (Kindle only)
 
-Then tell the Kindle to use it:
+Sideloading over USB is the reliable way (Send-to-Kindle often won't register a file as a *dictionary*):
 
-5. On the Kindle: **Settings → Languages & Dictionaries → Dictionaries**.
-6. Under **English**, set the new dictionary as the default — or leave the default alone and switch per-book: in the book, long-press a word, and in the popup tap the dictionary name at the top to pick this one.
+1. Connect your Kindle with a USB cable. It shows up as a drive.
+2. Copy the `.mobi` you want (recommended: the Extended one) into the **`documents`** folder.
+3. Eject the Kindle and unplug it.
+4. On the Kindle: **Settings → Languages & Dictionaries → Dictionaries**. Under **English**, set the new dictionary as the default — or leave the default and switch per-book: long-press a word in the novel and tap the dictionary name at the top of the popup.
 
-That's it. Long-press any word while reading and the definition appears.
+Then long-press any word while reading and the definition appears.
 
-### The reading guide (EPUB)
+## Building the dictionaries from source
 
-`Blood_Meridian_Vocabulary_Companion.epub` is a regular ebook, so it's easier:
+The dictionaries are generated from the reading guide plus the public-domain Webster's 1913 word list:
 
-- **USB:** copy it into the same `documents` folder. It shows up in your library as a book to open and read.
-- **Or email it** to your Kindle with [Send to Kindle](https://www.amazon.com/sendtokindle) — that works fine for ordinary books (it's only dictionaries that Send-to-Kindle is unreliable for).
+```
+python3 build_dicts.py
+```
+
+The script reads the ~1,300 special terms out of `Blood_Meridian_Vocabulary_Companion.epub`, downloads the Webster's 1913 source on first run, and — if it can find Amazon's `kindlegen` — writes `Webster_1913_Dictionary.mobi` and `Blood_Meridian_Dictionary_Extended.mobi` into `dictionaries/`. `kindlegen` is the legacy dictionary builder bundled inside Kindle Previewer on macOS; if it isn't found, the script writes the dictionary source instead so you can build it yourself. Run `python3 build_dicts.py --help` for options.
+
+See [`docs/BUILD.md`](docs/BUILD.md) for the repository layout, build internals, and how to run the tests.
+
+---
+
+*The reading guide was compiled by Benjamin Feder. The general definitions come from Webster's 1913 Dictionary (public domain), via [matthewreagan/WebstersEnglishDictionary](https://github.com/matthewreagan/WebstersEnglishDictionary). Short quotations from* Blood Meridian *are used to illustrate word meanings.*

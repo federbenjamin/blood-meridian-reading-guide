@@ -1,13 +1,50 @@
 #!/usr/bin/env python3
-"""Build two Kindle dictionaries:
-   1. Webster's 1913 (public domain) standalone  -> web_src/
-   2. Webster's 1913 + Blood Meridian entries folded in -> ext_src/
-"""
-import os, re, html, json, uuid, unicodedata
+"""Build the Blood Meridian Kindle dictionaries.
 
-BASE = "/private/tmp/claude-501/-Users-benjaminfeder-Programming-blood-meridian-guide/0d3b33f1-bcae-4e34-9cb7-4534d8bada54/scratchpad"
-WEB_JSON = f"{BASE}/webster/reagan.json"
-BM_DIR   = f"{BASE}/build/OEBPS"
+Produces two sideloadable Kindle dictionaries (.mobi):
+
+  1. Webster_1913_Dictionary.mobi          - Webster's 1913 (public domain) standalone
+  2. Blood_Meridian_Dictionary_Extended.mobi - Webster's 1913 with this book's ~1,300
+     special terms folded in (the in-context gloss + book quote shown first, then the
+     general Webster definition).
+
+Inputs (resolved automatically, override with flags):
+  - Webster source : webster_1913.json next to this script; if absent it is downloaded
+                     from matthewreagan/WebstersEnglishDictionary (public domain).
+  - Blood Meridian : Blood_Meridian_Vocabulary_Companion.epub next to this script;
+                     entries are read straight out of the EPUB.
+  - kindlegen      : the real .mobi builder. Found via --kindlegen, $KINDLEGEN, PATH,
+                     or the copy bundled inside Kindle Previewer on macOS. If it can't
+                     be found, the OPF source is written out and you can build manually.
+
+Usage:
+  python3 build_dicts.py
+  python3 build_dicts.py --outdir dist --kindlegen /path/to/kindlegen
+
+Notes:
+  - kindlegen is run with -c1 (PalmDOC). -c2 (Huffdic) segfaults on this content.
+  - Requires Python 3.8+ and a network connection on first run (to fetch the Webster
+    source) unless webster_1913.json is already present.
+"""
+import argparse
+import html
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unicodedata
+import urllib.request
+import uuid
+import zipfile
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+WEBSTER_URL = ("https://raw.githubusercontent.com/matthewreagan/"
+               "WebstersEnglishDictionary/master/dictionary.json")
+KINDLEGEN_MAC = ("/Applications/Kindle Previewer 3.app/Contents/lib/fc/bin/kindlegen")
 IDX_NS = "https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf"
 CHUNK = 500
 
@@ -69,39 +106,43 @@ def lookup_keys(plain):
     forms = {f for f in forms if f and len(f) >= 2}
     return primary, forms
 
-# ---------- parse Blood Meridian companion ----------
+# ---------- parse Blood Meridian companion (read from the EPUB) ----------
 ENTRY_RE = re.compile(r'<p class="entry">(.*?)</p>', re.S)
 TERM_RE  = re.compile(r'<span class="term">(.*?)</span>', re.S)
 POS_RE   = re.compile(r'<span class="pos">(.*?)</span>', re.S)
 Q_RE     = re.compile(r'<span class="q"><em>(.*?)</em></span>', re.S)
 
-def parse_bm():
-    files = ([f"{BM_DIR}/epigraphs.xhtml"]
-             + [f"{BM_DIR}/chapter-{i:02d}.xhtml" for i in range(1,24)]
-             + [f"{BM_DIR}/epilogue.xhtml"])
+def parse_bm(companion_epub):
+    names = (["OEBPS/epigraphs.xhtml"]
+             + [f"OEBPS/chapter-{i:02d}.xhtml" for i in range(1, 24)]
+             + ["OEBPS/epilogue.xhtml"])
     groups, order = {}, []
-    for path in files:
-        doc = open(path, encoding="utf-8").read()
-        for block in ENTRY_RE.findall(doc):
-            mt = TERM_RE.search(block)
-            if not mt: continue
-            term_raw = mt.group(1).strip()
-            term_plain = html.unescape(strip_tags(term_raw)).strip()
-            if not term_plain: continue
-            mp = POS_RE.search(block); mq = Q_RE.search(block)
-            pos_raw = mp.group(1).strip() if mp else ''
-            quote_raw = mq.group(1).strip() if mq else ''
-            after = block[mp.end():] if mp else block[mt.end():]
-            after = re.sub(r'^\s*&#8212;\s*', '', after, count=1)
-            def_raw = re.split(r'<span class="q">', after, maxsplit=1)[0].strip()
-            key = term_plain.lower()
-            if key not in groups:
-                groups[key] = {"display": term_raw, "plain": term_plain, "senses": []}
-                order.append(key)
-            g = groups[key]
-            sig = re.sub(r'\s+',' ', strip_tags(def_raw).lower()).strip()[:90]
-            if any(s["sig"] == sig for s in g["senses"]): continue
-            g["senses"].append({"pos": pos_raw, "def": def_raw, "quote": quote_raw, "sig": sig})
+    with zipfile.ZipFile(companion_epub) as z:
+        present = set(z.namelist())
+        for name in names:
+            if name not in present:
+                continue
+            doc = z.read(name).decode("utf-8")
+            for block in ENTRY_RE.findall(doc):
+                mt = TERM_RE.search(block)
+                if not mt: continue
+                term_raw = mt.group(1).strip()
+                term_plain = html.unescape(strip_tags(term_raw)).strip()
+                if not term_plain: continue
+                mp = POS_RE.search(block); mq = Q_RE.search(block)
+                pos_raw = mp.group(1).strip() if mp else ''
+                quote_raw = mq.group(1).strip() if mq else ''
+                after = block[mp.end():] if mp else block[mt.end():]
+                after = re.sub(r'^\s*&#8212;\s*', '', after, count=1)
+                def_raw = re.split(r'<span class="q">', after, maxsplit=1)[0].strip()
+                key = term_plain.lower()
+                if key not in groups:
+                    groups[key] = {"display": term_raw, "plain": term_plain, "senses": []}
+                    order.append(key)
+                g = groups[key]
+                sig = re.sub(r'\s+', ' ', strip_tags(def_raw).lower()).strip()[:90]
+                if any(s["sig"] == sig for s in g["senses"]): continue
+                g["senses"].append({"pos": pos_raw, "def": def_raw, "quote": quote_raw, "sig": sig})
     return groups, order
 
 def bm_body(senses, header):
@@ -250,7 +291,8 @@ def emit_dict(out_dir, title, entries):
         fn = f"content-{ci//CHUNK:04d}.xhtml"; files.append(fn)
         with open(os.path.join(out_dir, fn), "w", encoding="utf-8") as fh:
             fh.write(HEAD); fh.write("\n".join(rendered[ci:ci+CHUNK])); fh.write(TAIL)
-    open(os.path.join(out_dir,"dict.css"),"w",encoding="utf-8").write(CSS)
+    with open(os.path.join(out_dir, "dict.css"), "w", encoding="utf-8") as fh:
+        fh.write(CSS)
     uid = "urn:uuid:" + str(uuid.uuid4())
     man = ['    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
            '    <item id="css" href="dict.css" media-type="text/css"/>']
@@ -281,7 +323,8 @@ def emit_dict(out_dir, title, entries):
   </spine>
 </package>
 '''
-    open(os.path.join(out_dir,"content.opf"),"w",encoding="utf-8").write(opf)
+    with open(os.path.join(out_dir, "content.opf"), "w", encoding="utf-8") as fh:
+        fh.write(opf)
     ncx = f'''<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
@@ -292,61 +335,127 @@ def emit_dict(out_dir, title, entries):
   </navMap>
 </ncx>
 '''
-    open(os.path.join(out_dir,"toc.ncx"),"w",encoding="utf-8").write(ncx)
+    with open(os.path.join(out_dir, "toc.ncx"), "w", encoding="utf-8") as fh:
+        fh.write(ncx)
     return len(rendered), len(files)
 
-# ---------- build Webster entries ----------
-web = json.load(open(WEB_JSON, encoding="utf-8"))
-web_entries = {}   # key -> entry dict (kept for augmentation)
-for key in sorted(web.keys()):
-    deftext = web[key]
-    if not deftext or not deftext.strip(): continue
-    prim, forms = lookup_keys(key)
-    if not prim: continue
-    disp = key[:1].upper() + key[1:]
-    web_entries[key] = {"display": xml_escape(disp), "primary": prim,
-                        "iforms": forms, "body": web_body(deftext)}
+# ---------- inputs & kindlegen ----------
+def ensure_webster(path):
+    p = Path(path).resolve() if path else (SCRIPT_DIR / "webster_1913.json")
+    if p.exists():
+        return p
+    print(f"Webster source not found at {p}\n  downloading public-domain Webster's 1913 from\n  {WEBSTER_URL}")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    urllib.request.urlretrieve(WEBSTER_URL, p)
+    print(f"  saved {p} ({p.stat().st_size // (1024*1024)} MB)")
+    return p
 
-# ---------- DICT 1: Webster only ----------
-n1, f1 = emit_dict(f"{BASE}/webster/web_src",
-                   "Webster's 1913 Dictionary", list(web_entries.values()))
-print(f"Webster dict: {n1} entries, {f1} files")
+def find_kindlegen(explicit):
+    for cand in (explicit, os.environ.get("KINDLEGEN"),
+                 shutil.which("kindlegen"), KINDLEGEN_MAC):
+        if cand and Path(cand).exists():
+            return cand
+    return None
 
-# ---------- DICT 2: two Extended variants (fold BM into Webster) ----------
-BM_HDR  = '<p class="bmh"><b>&#9656; Blood Meridian</b></p>'
-WEB_HDR = '<p class="bmh"><b>&#9656; Webster 1913</b></p>'
-bm_groups, bm_order = parse_bm()
-web_keys = set(web_entries.keys())
+def produce(mobi_name, title, entries, outdir, kindlegen):
+    """Emit OPF source and (if kindlegen is available) build the .mobi into outdir."""
+    if kindlegen:
+        tmp = Path(tempfile.mkdtemp(prefix="dictbuild_"))
+        try:
+            n, _ = emit_dict(str(tmp), title, entries)
+            # kindlegen writes the .mobi next to content.opf; -c1 (PalmDOC), -c2 segfaults.
+            proc = subprocess.run([kindlegen, "content.opf", "-c1", "-o", mobi_name],
+                                  cwd=str(tmp), capture_output=True, text=True)
+            built = tmp / mobi_name
+            if not built.exists():
+                sys.stderr.write(proc.stdout[-1500:] + "\n" + proc.stderr[-800:] + "\n")
+                raise SystemExit(f"kindlegen failed to produce {mobi_name} (exit {proc.returncode})")
+            dest = outdir / mobi_name
+            shutil.move(str(built), str(dest))
+            print(f"  built {dest.name}  ({n:,} entries)  ->  {dest}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    else:
+        src = outdir / "_build" / (mobi_name[:-5] + "_src")
+        n, f = emit_dict(str(src), title, entries)
+        print(f"  wrote source for {mobi_name} to {src}  ({n:,} entries, {f} files)")
+        print(f"    kindlegen not found; build manually:  kindlegen \"{src}/content.opf\" -c1 -o {mobi_name}")
+    return mobi_name
 
-bm_for_web = {}   # web_key -> list of (group, bm_forms)  (handles multi-hit)
-extra = []        # BM-only standalone entries, identical in both variants
-for k in bm_order:
-    g = bm_groups[k]
-    plain = g["plain"]; pl = plain.lower()
-    cands = [pl, ascii_fold(pl)]
-    if pl.endswith('s'):  cands.append(pl[:-1])
-    if pl.endswith('es'): cands.append(pl[:-2])
-    hit = next((c for c in cands if c in web_keys), None)
-    bm_prim, bm_forms = lookup_keys(plain)
-    if hit:
-        bm_for_web.setdefault(hit, []).append((g, bm_forms))
-    elif bm_prim:
-        extra.append({"display": g["display"], "primary": bm_prim,
-                      "iforms": bm_forms, "body": bm_body(g["senses"], header=False)})
+# ---------- main ----------
+def main():
+    ap = argparse.ArgumentParser(description="Build the Blood Meridian Kindle dictionaries.")
+    ap.add_argument("--webster", help="Webster's 1913 JSON (default: webster_1913.json beside this script, downloaded if missing)")
+    ap.add_argument("--companion", help="Blood Meridian companion .epub (default: beside this script)")
+    ap.add_argument("--kindlegen", help="path to kindlegen (default: $KINDLEGEN, PATH, or Kindle Previewer on macOS)")
+    ap.add_argument("--outdir", default=str(SCRIPT_DIR / "dictionaries"), help="where to write the .mobi files (default: ./dictionaries)")
+    args = ap.parse_args()
 
-def build_ext(lead):
-    """lead='web' -> Webster def first then BM block; lead='bm' -> BM block first then Webster."""
+    outdir = Path(args.outdir).resolve(); outdir.mkdir(parents=True, exist_ok=True)
+    companion = Path(args.companion).resolve() if args.companion else (SCRIPT_DIR / "Blood_Meridian_Vocabulary_Companion.epub")
+    if not companion.exists():
+        raise SystemExit(f"companion EPUB not found: {companion}")
+    web_path = ensure_webster(args.webster)
+    kindlegen = find_kindlegen(args.kindlegen)
+    print(f"Webster source : {web_path}")
+    print(f"Companion EPUB : {companion}")
+    print(f"kindlegen      : {kindlegen or '(not found - will emit source only)'}")
+    print(f"Output dir     : {outdir}\n")
+
+    # ----- build Webster entries (shared by both dictionaries) -----
+    with open(web_path, encoding="utf-8") as fh:
+        web = json.load(fh)
+    web_entries = {}
+    for key in sorted(web.keys()):
+        deftext = web[key]
+        if not deftext or not deftext.strip(): continue
+        prim, forms = lookup_keys(key)
+        if not prim: continue
+        disp = key[:1].upper() + key[1:]
+        web_entries[key] = {"display": xml_escape(disp), "primary": prim,
+                            "iforms": forms, "body": web_body(deftext)}
+    print(f"Webster entries parsed: {len(web_entries):,}")
+
+    # ----- DICT 1: Webster standalone -----
+    produce("Webster_1913_Dictionary.mobi", "Webster's 1913 Dictionary",
+            list(web_entries.values()), outdir, kindlegen)
+
+    # ----- DICT 2: Extended (Blood Meridian senses first, then Webster) -----
+    BM_HDR  = '<p class="bmh"><b>&#9656; Blood Meridian</b></p>'   # noqa: F841 (kept for reference)
+    WEB_HDR = '<p class="bmh"><b>&#9656; Webster 1913</b></p>'
+    bm_groups, bm_order = parse_bm(companion)
+    web_keys = set(web_entries.keys())
+
+    bm_for_web = {}   # web_key -> list of (group, bm_forms)  (handles multi-hit)
+    extra = []        # Blood-Meridian-only standalone entries
+    for k in bm_order:
+        g = bm_groups[k]
+        pl = g["plain"].lower()
+        cands = [pl, ascii_fold(pl)]
+        if pl.endswith('s'):  cands.append(pl[:-1])
+        if pl.endswith('es'): cands.append(pl[:-2])
+        hit = next((c for c in cands if c in web_keys), None)
+        bm_prim, bm_forms = lookup_keys(g["plain"])
+        if hit:
+            bm_for_web.setdefault(hit, []).append((g, bm_forms))
+        elif bm_prim:
+            extra.append({"display": g["display"], "primary": bm_prim,
+                          "iforms": bm_forms, "body": bm_body(g["senses"], header=False)})
+
     d = {k: dict(v, iforms=set(v["iforms"])) for k, v in web_entries.items()}
     for wk, lst in bm_for_web.items():
         e = d[wk]
         bm_html = "".join(bm_body(g["senses"], header=False) for g, _ in lst)
         for _, frm in lst: e["iforms"] |= frm
-        wbody = web_entries[wk]["body"]
-        e["body"] = (wbody + BM_HDR + bm_html) if lead == "web" else (bm_html + WEB_HDR + wbody)
-    return sorted(list(d.values()) + extra, key=lambda e: strip_tags(e["display"]).lower())
+        e["body"] = bm_html + WEB_HDR + web_entries[wk]["body"]   # Blood Meridian first
+    ext_entries = sorted(list(d.values()) + extra,
+                         key=lambda e: strip_tags(e["display"]).lower())
+    print(f"Blood Meridian terms: {len(bm_for_web):,} folded into Webster headwords, "
+          f"{len(extra):,} added standalone")
 
-nb, fb = emit_dict(f"{BASE}/webster/ext_bf",
-                   "Blood Meridian Extended Dictionary (Blood Meridian first)", build_ext("bm"))
-print(f"Extended (BM-first): {nb} entries, {fb} files")
-print(f"  BM folded into existing Webster entries: {len(bm_for_web)} headwords")
-print(f"  BM added as new standalone entries:      {len(extra)}")
+    produce("Blood_Meridian_Dictionary_Extended.mobi", "Blood Meridian Extended Dictionary",
+            ext_entries, outdir, kindlegen)
+    print("\nDone.")
+
+if __name__ == "__main__":
+    main()
