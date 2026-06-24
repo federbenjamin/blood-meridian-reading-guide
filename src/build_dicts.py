@@ -42,6 +42,7 @@ import zipfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent          # script lives in src/; inputs and outputs sit at repo root
 WEBSTER_URL = ("https://raw.githubusercontent.com/matthewreagan/"
                "WebstersEnglishDictionary/master/dictionary.json")
 KINDLEGEN_MAC = ("/Applications/Kindle Previewer 3.app/Contents/lib/fc/bin/kindlegen")
@@ -204,7 +205,8 @@ def _peel_runins(seg):
         elif re.match(r'[A-Z]', p) or p.startswith(('To ', 'See ')):
             phrases.append(p)                          # looks like a sub-entry lemma
         else:
-            main = main.rstrip() + ' — ' + p      # lowercase tail -> keep inline
+            main = main.rstrip()                       # lowercase tail -> keep inline
+            main += (' ' if main[-1:] in ',;:.' else '; ') + p
     return main.rstrip(), phrases, syns
 
 def _render_phrase(p):
@@ -341,7 +343,7 @@ def emit_dict(out_dir, title, entries):
 
 # ---------- inputs & kindlegen ----------
 def ensure_webster(path):
-    p = Path(path).resolve() if path else (SCRIPT_DIR / "webster_1913.json")
+    p = Path(path).resolve() if path else (REPO_ROOT / "webster_1913.json")
     if p.exists():
         return p
     print(f"Webster source not found at {p}\n  downloading public-domain Webster's 1913 from\n  {WEBSTER_URL}")
@@ -385,14 +387,14 @@ def produce(mobi_name, title, entries, outdir, kindlegen):
 # ---------- main ----------
 def main():
     ap = argparse.ArgumentParser(description="Build the Blood Meridian Kindle dictionaries.")
-    ap.add_argument("--webster", help="Webster's 1913 JSON (default: webster_1913.json beside this script, downloaded if missing)")
-    ap.add_argument("--companion", help="Blood Meridian companion .epub (default: beside this script)")
+    ap.add_argument("--webster", help="Webster's 1913 JSON (default: webster_1913.json at repo root, downloaded if missing)")
+    ap.add_argument("--companion", help="Blood Meridian companion .epub (default: at repo root)")
     ap.add_argument("--kindlegen", help="path to kindlegen (default: $KINDLEGEN, PATH, or Kindle Previewer on macOS)")
-    ap.add_argument("--outdir", default=str(SCRIPT_DIR / "dictionaries"), help="where to write the .mobi files (default: ./dictionaries)")
+    ap.add_argument("--outdir", default=str(REPO_ROOT / "dictionaries"), help="where to write the .mobi files (default: ./dictionaries)")
     args = ap.parse_args()
 
     outdir = Path(args.outdir).resolve(); outdir.mkdir(parents=True, exist_ok=True)
-    companion = Path(args.companion).resolve() if args.companion else (SCRIPT_DIR / "Blood_Meridian_Vocabulary_Companion.epub")
+    companion = Path(args.companion).resolve() if args.companion else (REPO_ROOT / "Blood_Meridian_Vocabulary_Companion.epub")
     if not companion.exists():
         raise SystemExit(f"companion EPUB not found: {companion}")
     web_path = ensure_webster(args.webster)
