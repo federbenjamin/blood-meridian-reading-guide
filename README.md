@@ -35,3 +35,11 @@ Sideload over USB. Send-to-Kindle often will not register a file as a dictionary
 ## Credits
 
 Compiled by Benjamin Feder. General definitions from Webster's 1913 Dictionary (public domain), via [matthewreagan/WebstersEnglishDictionary](https://github.com/matthewreagan/WebstersEnglishDictionary). Short quotations from *Blood Meridian* illustrate word meanings.
+
+## License
+
+The build script, the tests, and the glosses written for this guide are under the [MIT license](LICENSE).
+
+The sentences quoted from *Blood Meridian* are not. They stay under the book's own copyright (© 1985 Cormac McCarthy) and appear here as short quotations that illustrate word meanings. The EPUB and the dictionaries contain both.
+
+The Webster's 1913 definitions are in the public domain.
