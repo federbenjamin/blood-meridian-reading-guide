@@ -11,6 +11,8 @@
 
 A chapter-by-chapter vocabulary companion to Cormac McCarthy's *Blood Meridian*. It defines the novel's archaic, dialectal, foreign, and technical words in reading order, each with the sentence from the book it appears in.
 
+It is for anyone reading the novel: open a chapter's entries as you read that chapter.
+
 ## Download
 
 You need an e-reader app, or a Kindle for the pop-up dictionary. Download the reading guide and the recommended dictionary from the [latest release](https://github.com/federbenjamin/blood-meridian-reading-guide/releases/latest):
