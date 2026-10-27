@@ -6,7 +6,6 @@ blood-meridian-reading-guide is a chapter-by-chapter vocabulary reading guide to
 ## Git workflow
 
 - `main` changes only through a PR, squash-merged.
-- Branch names: `<type>/<slug>`, the type being the commit type (`feat`, `fix`, `docs`, `chore`, `refactor`).
 <!-- <<< git-workflow -->
 
 ## Project state
