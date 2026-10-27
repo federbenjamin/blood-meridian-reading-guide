@@ -1,5 +1,7 @@
 # blood-meridian-reading-guide
 
+blood-meridian-reading-guide is a chapter-by-chapter vocabulary reading guide to Cormac McCarthy's Blood Meridian, for anyone reading the novel. It holds the guide as an EPUB (about 1,500 terms, each with a definition and the sentence it appears in) and three Kindle pop-up dictionaries: the book's terms, Webster's 1913, and the two combined. `src/build_dicts.py` builds the dictionaries from the sources in `src/`, and readers download the files from the latest release.
+
 <!-- >>> git-workflow (generated block; do not edit by hand) -->
 ## Git workflow
 
